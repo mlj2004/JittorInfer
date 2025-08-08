@@ -1,0 +1,112 @@
+[
+    {
+        "op": "RopeExtCustom",
+        "input_desc": [
+            {
+                "name": "x",
+                "param_type": "required",
+                "format": [
+                    "ND",
+                    "ND"
+                ],
+                "type": [
+                    "float16",
+                    "float"
+                ]
+            },
+            {
+                "name": "pos",
+                "param_type": "required",
+                "format": [
+                    "ND",
+                    "ND"
+                ],
+                "type": [
+                    "int32",
+                    "int32"
+                ]
+            }
+        ],
+        "output_desc": [
+            {
+                "name": "dst",
+                "param_type": "required",
+                "format": [
+                    "ND",
+                    "ND"
+                ],
+                "type": [
+                    "float16",
+                    "float"
+                ]
+            }
+        ],
+        "attr": [
+            {
+                "name": "ne0",
+                "param_type": "required",
+                "type": "int"
+            },
+            {
+                "name": "ne1",
+                "param_type": "required",
+                "type": "int"
+            },
+            {
+                "name": "s1",
+                "param_type": "required",
+                "type": "int"
+            },
+            {
+                "name": "s2",
+                "param_type": "required",
+                "type": "int"
+            },
+            {
+                "name": "n_dims",
+                "param_type": "required",
+                "type": "int"
+            },
+            {
+                "name": "freq_scale",
+                "param_type": "required",
+                "type": "float"
+            },
+            {
+                "name": "theta_scale",
+                "param_type": "required",
+                "type": "float"
+            },
+            {
+                "name": "ext_factor",
+                "param_type": "required",
+                "type": "float"
+            },
+            {
+                "name": "attn_factor",
+                "param_type": "required",
+                "type": "float"
+            },
+            {
+                "name": "corr_dims_v_0",
+                "param_type": "required",
+                "type": "float"
+            },
+            {
+                "name": "corr_dims_v_1",
+                "param_type": "required",
+                "type": "float"
+            },
+            {
+                "name": "logf_1_freq_scale",
+                "param_type": "required",
+                "type": "float"
+            },
+            {
+                "name": "pos_len",
+                "param_type": "required",
+                "type": "int"
+            }
+        ]
+    }
+]
