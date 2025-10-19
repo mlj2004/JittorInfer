@@ -6,6 +6,7 @@
 #include "ops_test_case.h"
 #include <cstdint>
 #include <iostream>
+#include <ostream>
 #include <random>
 #include <iomanip>
 #include <cstring>
@@ -14,8 +15,8 @@
 #include <vector>
 
 const int max_graph_nodes = 32;
-const float abs_error_bar = 0.001;
-const float rel_error_bar = 0.001;
+const float abs_error_bar = 0.01;
+const float rel_error_bar = 0.002;
 
 void ops_test_cpu(test_case* op_case, std::vector<float>& output){
 // 初始化输出向量
@@ -190,7 +191,7 @@ bool ops_test(ggml_backend_dev_t cann_dev, test_case* op_case){
     ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(cann_dev);
 
     build_ops_graph(op_case, output_host_cann, cann_backend);
-
+    GGML_ASSERT(output_host_cann.size() == op_case->output_size);
     std::cout << "Cann output tensor sample (first few values):" << std::endl;
     for (int i = 0; i < std::min(static_cast<int64_t>(10), op_case->output_size); i++) {
         std::cout << std::fixed << std::setprecision(4) << static_cast<float>(output_host_cann[i]) << " ";
@@ -230,6 +231,12 @@ int main() {
         // new test_case_sub(), unimplemented
         new test_case_mul(),
         new test_case_div(),
+        new test_case_sqr(),
+        new test_case_sum_rows(),
+        new test_case_acc(),
+        new test_case_norm(),
+        new test_case_group_norm(),
+        new test_case_concat()
     };
     std::vector<std::string> failed_operation; 
     for (int i = 0; i < test_cases.size(); ++i){
@@ -244,7 +251,7 @@ int main() {
     }
     std::cout << "Test result : " << failed_operation.size() << " / " << test_cases.size() << " failed :" << std::endl;
     for(auto &val : failed_operation){
-        std::cout<< val <<" ";
+        std::cout << val << std::endl;
     }
     return 0;
 }

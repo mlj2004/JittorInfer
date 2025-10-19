@@ -5,6 +5,7 @@
 #include "ggml-backend.h"
 #include "llama-impl.h"
 #include <cstdint>
+#include <cstdio>
 #include <iostream>
 #include <random>
 #include <iomanip>
@@ -57,6 +58,58 @@ struct test_case_div:test_case{
     int dim1,dim2,dim3,dim4;
     test_case_div(int dim1 = 64,int dim2 = 64,int dim3 =4, int dim4 = 4):
         dim1(dim1),dim2(dim2),dim3(dim3),dim4(dim4),test_case("DIV"){}
+    void init_src_size();
+    ggml_tensor* build_graph(ggml_context* compute_ctx, std::vector<ggml_tensor*>& src_tensors)const;
+};
+struct test_case_sqr:test_case{
+    int dim1,dim2,dim3,dim4;
+    test_case_sqr(int dim1 = 64,int dim2 = 64,int dim3 =4, int dim4 = 4):
+        dim1(dim1),dim2(dim2),dim3(dim3),dim4(dim4),test_case("SQR"){}
+    void init_src_size();
+    ggml_tensor* build_graph(ggml_context* compute_ctx, std::vector<ggml_tensor*>& src_tensors)const;
+};
+struct test_case_sum_rows:test_case{
+    int dim1,dim2,dim3,dim4;
+    test_case_sum_rows(int dim1 = 64,int dim2 = 64,int dim3 =4, int dim4 = 4):
+        dim1(dim1),dim2(dim2),dim3(dim3),dim4(dim4),test_case("SUM_ROWS"){}
+    void init_src_size();
+    ggml_tensor* build_graph(ggml_context* compute_ctx, std::vector<ggml_tensor*>& src_tensors)const;
+};
+struct test_case_acc:test_case{
+    int a_dim1,a_dim2,a_dim3,a_dim4,
+    b_dim1,b_dim2,b_dim3,b_dim4,
+    nb1,nb2,nb3,offset;
+    test_case_acc(int a_dim1 = 256,int a_dim2 = 17,int a_dim3 = 1, int a_dim4 = 1,
+        int b_dim1 = 256,int b_dim2 = 16,int b_dim3 = 1, int b_dim4 = 1):
+        a_dim1(a_dim1),a_dim2(a_dim2),a_dim3(a_dim3),a_dim4(a_dim4),
+        b_dim1(b_dim1),b_dim2(b_dim2),b_dim3(b_dim3),b_dim4(b_dim4),
+        test_case("ACC"){}
+    void init_src_size();
+    ggml_tensor* build_graph(ggml_context* compute_ctx, std::vector<ggml_tensor*>& src_tensors)const;
+};
+struct test_case_norm:test_case{
+    int dim1,dim2,dim3,dim4;
+    float eps;
+    test_case_norm(int dim1 = 64,int dim2 = 64,int dim3 =4, int dim4 = 4,float eps = 1e-6f):
+        dim1(dim1),dim2(dim2),dim3(dim3),dim4(dim4),eps(eps),test_case("NORM"){}
+    void init_src_size();
+    ggml_tensor* build_graph(ggml_context* compute_ctx, std::vector<ggml_tensor*>& src_tensors)const;
+};
+struct test_case_group_norm:test_case{
+    int dim1,dim2,dim3,dim4;
+    int32_t num_group;
+    float eps;
+    test_case_group_norm(int dim1 = 64,int dim2 = 64,int dim3 =320, int dim4 = 1,int32_t n_group = 32,float eps = 1e-6f):
+        dim1(dim1),dim2(dim2),dim3(dim3),dim4(dim4),num_group(n_group),eps(eps),test_case("GROUP_NORM"){}
+    void init_src_size();
+    ggml_tensor* build_graph(ggml_context* compute_ctx, std::vector<ggml_tensor*>& src_tensors)const;
+};
+struct test_case_concat:test_case{
+    std::vector<int> ne_a;
+    int ne_b_d;
+    int dim;
+    test_case_concat(int dim1 = 64,int dim2 = 64,int dim3 =5, int dim4 = 5, int ne_b_d = 6, int dim = 2):
+        ne_a({dim1,dim2,dim3,dim4}),dim(dim),ne_b_d(ne_b_d),test_case("CONCAT"){}
     void init_src_size();
     ggml_tensor* build_graph(ggml_context* compute_ctx, std::vector<ggml_tensor*>& src_tensors)const;
 };
