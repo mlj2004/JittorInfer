@@ -44,7 +44,7 @@ void ops_test_cpu(test_case* op_case, std::vector<float>& output){
     // 构建计算图
     struct ggml_cgraph * gf = ggml_new_graph_custom(ctx, 100, false);
     
-    ggml_tensor* output_tensor = op_case->build_graph(ctx, src_tensors);
+    ggml_tensor* output_tensor = op_case->build_graph_cpu(ctx, src_tensors);
     
     // ggml_tensor* output_tensor = ggml_add(ctx, src_tensors[0], src_tensors[1]);
 
@@ -78,6 +78,7 @@ void ops_test_cpu(test_case* op_case, std::vector<float>& output){
     }
     // 复制结果到输出向量
     memcpy(output.data(), output_tensor->data, output.size() * sizeof(float));
+    op_case->special_check_cpu(output_tensor);
     // 释放资源
     ggml_free(ctx);
 }
@@ -103,6 +104,7 @@ void build_ops_graph(
     }
     
     ggml_tensor* output_tensor = op_case->build_graph(ctx, src_tensors);
+    GGML_ASSERT(ggml_nelements(output_tensor) == op_case->output_size);
 
     ggml_build_forward_expand(gf, output_tensor);
 
@@ -171,9 +173,7 @@ bool calculate_error(std::vector<float> &output_host,std::vector<float> &output_
 bool ops_test(ggml_backend_dev_t cann_dev, test_case* op_case){
     op_case->init_src_size();
     std::cout << "Initializing tensors with random values..." << std::endl;
-    for(auto &val: op_case->src){
-        init_tensor(val);
-    }
+    op_case->init_tensors();
     std::vector<float> output_host_cpu(op_case->output_size);
 
     ops_test_cpu(op_case, output_host_cpu);
@@ -236,7 +236,43 @@ int main() {
         new test_case_acc(),
         new test_case_norm(),
         new test_case_group_norm(),
-        new test_case_concat()
+        new test_case_concat(),
+        new test_case_upscale(),
+        new test_case_pad(),
+        new test_case_arange(),
+        new test_case_gelu(),
+        new test_case_gelu_quick(),
+        new test_case_silu(),
+        new test_case_tanh(),
+        new test_case_relu(),
+        new test_case_hardsigmoid(),
+        new test_case_hardswish(),
+        new test_case_timestep_embedding(),
+        new test_case_rms_norm_fused(),
+        new test_case_leaky_relu(),
+        new test_case_rms_norm(),
+        new test_case_mul_mat(),
+        new test_case_mul_mat_id(),
+        new test_case_scale(),
+        new test_case_clamp(),
+        new test_case_cpy(),
+        new test_case_cont(),
+        new test_case_diag_mask_inf(),
+        new test_case_soft_max(),
+        new test_case_soft_max({64,64,1,1},{5,5},true), // with mask
+        new test_case_rope(), // fails when n_dim is not power of 2
+        new test_case_im2col(),
+        new test_case_pool_2d(),
+        new test_case_pool_2d({32,32,5,1},GGML_OP_POOL_MAX),
+        new test_case_argsort(),
+        new test_case_argsort({32,32,5,1},GGML_SORT_ORDER_DESC),
+        new test_case_to_zero(),
+        // new test_case_all_reduce_sum(), // unimplemented
+        new test_case_get_slice(),
+        // new test_case_scatter_update() // with strange bug ?
+        new test_case_moe_fused(),
+        new test_case_flash_attn_jittor(),
+        new test_case_flash_attn_prompt()
     };
     std::vector<std::string> failed_operation; 
     for (int i = 0; i < test_cases.size(); ++i){

@@ -246,7 +246,7 @@ int64_t ggml_cann_get_mulmat_bcast_shape(
     // For mul_mat, a dimension needs to be added before the dimension that
     // weight needs to be expanded to satisfy the bcast rule of matrix
     // multiplication.
-    for (int i = 0; i < GGML_MAX_DIMS; i++) {
+    for (int i = 0; i < GGML_MAX_DIMS; i++) { 
         int64_t nr = input_ne[i] / weight_ne[i];
         // Do not use bcast in the first two dimensions because we only support
         // the bcast batch dimension. Just copy them.
