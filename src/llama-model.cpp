@@ -1299,7 +1299,7 @@ void llama_model::load_hparams(llama_model_loader & ml) {
         case LLM_ARCH_QWEN2:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                
+
                 switch (hparams.n_layer) {
                     case 24:
                         type = LLM_TYPE_1B;

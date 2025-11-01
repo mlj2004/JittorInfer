@@ -5567,7 +5567,8 @@ void ggml_cann_flash_attn_prompt(ggml_backend_cann_context& ctx,
 
     // 最稳妥：从 key 张量形状推断 KV 头数，避免上游误传
     ggml_tensor* key_tensor_src = dst->src[1];
-    int64_t numKeyValueHeads = key_tensor_src ? key_tensor_src->ne[1] : key_num_heads;
+    int64_t numKeyValueHeads =
+        key_tensor_src ? key_tensor_src->ne[1] : key_num_heads;
     std::string sLayerOut = "BSND";
     char layerOut[sLayerOut.length()];
     strcpy(layerOut, sLayerOut.c_str());
@@ -5658,7 +5659,8 @@ void ggml_cann_flash_attn_jittor_v1(ggml_backend_cann_context& ctx,
 
     // 最稳妥：从 key 张量形状推断 KV 头数，避免上游误传
     ggml_tensor* key_tensor_src = dst->src[1];
-    int64_t numKeyValueHeads = key_tensor_src ? key_tensor_src->ne[1] : key_num_heads;
+    int64_t numKeyValueHeads =
+        key_tensor_src ? key_tensor_src->ne[1] : key_num_heads;
     std::string sLayerOut = "BNSD";
     char layerOut[sLayerOut.length()];
     strcpy(layerOut, sLayerOut.c_str());

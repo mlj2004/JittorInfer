@@ -22,6 +22,3 @@ struct ggml_cgraph * llm_build_qwen2_ge(llama_context & lctx, std::vector<uint8_
 void llm_update_qwen2_ge(llama_context & lctx);
 
 #endif  // LLAMA_GRAPH_QWEN2GE_H
-
-
-

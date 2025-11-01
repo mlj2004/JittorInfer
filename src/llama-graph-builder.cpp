@@ -12,10 +12,10 @@
 #include "ggml.h"
 #include "llama-context.h"
 #include "llama-graph-deepseek2.h"
-#include "llama-graph-qwen2.h"
 #include "llama-graph-deepseek2ge.h"
-#include "llama-graph-qwen2ge.h"
 #include "llama-graph-defrag.h"
+#include "llama-graph-qwen2.h"
+#include "llama-graph-qwen2ge.h"
 #include "llama-graph-utils.h"
 #include "llama-impl.h"
 
