@@ -1549,6 +1549,199 @@ ge::Operator handle_rope_op(
     float freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow;
     // const int n_past     = ((int32_t *) dst->op_params)[0]; // 过去的序列长度
     const int n_dims = ((int32_t *)node->op_params)[1];  // 特征维度数量
+    const int mode_param = ((int32_t *)node->op_params)[2];    // RoPE模式(原始)
+    // const int mode = (mode_param == 1) ? 1 : 0;                 // 归一化为0/1
+    // const int n_ctx      = ((int32_t *) dst->op_params)[3]; // 上下文长度
+    const int n_ctx_orig = ((int32_t *)node->op_params)[4];  // 原始上下文长度
+
+    // 复制浮点参数
+    memcpy(&freq_base, (int32_t *)dst->op_params + 5,
+           sizeof(float));  // 频率基数
+    memcpy(&freq_scale, (int32_t *)dst->op_params + 6,
+           sizeof(float));  // 频率缩放
+    memcpy(&ext_factor, (int32_t *)dst->op_params + 7,
+           sizeof(float));  // 扩展因子
+    memcpy(&attn_factor, (int32_t *)dst->op_params + 8,
+           sizeof(float));  // 注意力因子
+    memcpy(&beta_fast, (int32_t *)dst->op_params + 9,
+           sizeof(float));  // Beta快速
+    memcpy(&beta_slow, (int32_t *)dst->op_params + 10,
+           sizeof(float));  // Beta慢速
+
+    // 确认维度条件
+    GGML_ASSERT(n_dims == ne0);
+    GGML_ASSERT(n_dims % 2 == 0);  // 特征维度必须是偶数
+
+    // 计算RoPE参数
+    const float theta_scale = powf(freq_base, -2.0f / n_dims);  // 频率衰减因子
+    const size_t s01 = src0->nb[1] / ggml_type_size(src0->type);  // 步长1
+    const size_t s02 = src0->nb[2] / ggml_type_size(src0->type);  // 步长2
+
+    // 计算维度校正因子
+    float corr_dims[2];
+    const int64_t nr = ggml_nrows(src0);  // 行数
+    const int64_t pos_len = src0->ne[2];  // 位置长度
+    ggml_rope_yarn_corr_dims(n_dims, n_ctx_orig, freq_base, beta_fast,
+                             beta_slow, corr_dims);
+
+    const float logf_1_freq_scale = logf(1.0f / freq_scale);
+
+    /* 使用内置 RotaryPositionEmbedding：保持 x 为 4D (B,S,N,D)，不再做 5D 变形 */
+
+    // 第三步：执行RoPE操作
+    // TODO: 在同一个模型中多个RoPE也可能共享一个sin、cos缓存
+    std::string curr_suffix = "_" + std::to_string(op_index);
+    RopeCache rope_cache(cann_ctx, dst);
+    ge::Operator rope_sin_cache =
+        rope_cache.GetSinOp(graph, "rope_sin_tensor" + curr_suffix);
+    ge::Operator rope_cos_cache =
+        rope_cache.GetCosOp(graph, "rope_cos_tensor" + curr_suffix);
+
+    ge::Operator op_x1_squeeze = create_squeeze_op(
+        graph, "rope_squeeze_x1_", curr_suffix, op_x1, {0, 1, 2});
+
+    ge::Operator gather_sin_cache =
+        create_gather_op(graph, "rope_gather_sin_cache_", curr_suffix,
+                         rope_sin_cache, op_x1_squeeze, 1);
+    ge::Operator gather_cos_cache =
+        create_gather_op(graph, "rope_gather_cos_cache_", curr_suffix,
+                         rope_cos_cache, op_x1_squeeze, 1);
+
+    // 将 cos/sin 在最后一维 Tile 一次，使 D 与 x 的 D 一致（从 dim//2 扩展到 dim）
+    // 构造 multiples 常量 [1, 1, 1, 2]
+    std::vector<int32_t> multiples_vec = {1, 1, 1, 2};
+    ge::op::Const cos_multiples_const_op(("rope_cos_tile_multiples" + curr_suffix).c_str());
+    {
+        ge::TensorDesc desc(ge::Shape({4}), ge::FORMAT_ND, ge::DT_INT32);
+        ge::Tensor tens(desc, reinterpret_cast<uint8_t*>(multiples_vec.data()),
+                        multiples_vec.size() * sizeof(int32_t));
+        cos_multiples_const_op.set_attr_value(tens);
+        graph.AddOp(cos_multiples_const_op);
+    }
+
+    ge::op::Const sin_multiples_const_op(("rope_sin_tile_multiples" + curr_suffix).c_str());
+    {
+        ge::TensorDesc desc(ge::Shape({4}), ge::FORMAT_ND, ge::DT_INT32);
+        ge::Tensor tens(desc, reinterpret_cast<uint8_t*>(multiples_vec.data()),
+                        multiples_vec.size() * sizeof(int32_t));
+        sin_multiples_const_op.set_attr_value(tens);
+        graph.AddOp(sin_multiples_const_op);
+    }
+
+    // Tile cos/sin 到 4D [B, S, N, D]
+    ge::op::Tile cos_tile_op(("rope_cos_tile" + curr_suffix).c_str());
+    cos_tile_op.set_input_x(gather_cos_cache);
+    cos_tile_op.set_input_multiples(cos_multiples_const_op);
+    {
+        std::vector<int64_t> cos_out_shape = {src0->ne[3], src0->ne[2], 1, src0->ne[0]};
+        ge::TensorDesc out_desc(ge::Shape(cos_out_shape), ge::FORMAT_ND,
+                                get_data_type(node->type));
+        cos_tile_op.update_output_desc_y(out_desc);
+    }
+    graph.AddOp(cos_tile_op);
+
+    ge::op::Tile sin_tile_op(("rope_sin_tile" + curr_suffix).c_str());
+    sin_tile_op.set_input_x(gather_sin_cache);
+    sin_tile_op.set_input_multiples(sin_multiples_const_op);
+    {
+        std::vector<int64_t> sin_out_shape = {src0->ne[3], src0->ne[2], 1, src0->ne[0]};
+        ge::TensorDesc out_desc(ge::Shape(sin_out_shape), ge::FORMAT_ND,
+                                get_data_type(node->type));
+        sin_tile_op.update_output_desc_y(out_desc);
+    }
+    graph.AddOp(sin_tile_op);
+    std::string name_rope = "rope_rope" + curr_suffix;
+    // ge::op::RopeExtCustomV2 rope_op(name_rope.c_str());
+    ge::op::RotaryPositionEmbedding rope_op(name_rope.c_str());
+
+    // // 设置RoPE操作的输入（全部为4D：B,S,N,D）
+    rope_op.set_input_x(op_x0);
+    rope_op.set_input_cos(cos_tile_op);
+    rope_op.set_input_sin(sin_tile_op);
+    
+    // 设置RoPE模式
+    rope_op.set_attr_mode(1);
+    // 设置RoPE操作的输出描述（与 x 相同形状 4D）
+    {
+        std::vector<int64_t> output_shape = build_output_shape(node);
+        ge::TensorDesc desc_out_rope(ge::Shape(output_shape), ge::FORMAT_ND,
+                                     get_data_type(node->type));
+        rope_op.update_output_desc_y(desc_out_rope);
+    }
+
+    // 只设置3个属性
+    // rope_op.set_attr_ne0(ne0);
+    // rope_op.set_attr_ne1(ne1);
+    // rope_op.set_attr_pos_len(src0->ne[2]);
+
+    // std::string name_rope = "rope_rope_" + std::to_string(op_index);
+    // ge::op::RopeExtCustom rope_op(name_rope);
+
+    // // 设置RoPE操作的输入
+    // rope_op.set_input_x(perm_x_op);  // 转置后的输入
+    // rope_op.set_input_pos(op_x1);    // 位置索引
+
+    // // 设置RoPE操作的输出描述
+    // ge::TensorDesc desc_out_rope(ge::Shape(out_shape_perm_x), ge::FORMAT_ND,
+    //                              get_data_type(node->type));
+    // rope_op.update_output_desc_dst(desc_out_rope);
+
+    // // 设置RoPE操作的各种属性参数
+    // rope_op.set_attr_ne0(ne0);
+    // rope_op.set_attr_ne1(ne1);
+    // rope_op.set_attr_s1(s01);
+    // rope_op.set_attr_s2(s02);
+    // rope_op.set_attr_n_dims(n_dims);
+    // rope_op.set_attr_freq_scale(freq_scale);
+    // rope_op.set_attr_theta_scale(theta_scale);
+    // rope_op.set_attr_ext_factor(ext_factor);
+    // rope_op.set_attr_attn_factor(attn_factor);
+    // rope_op.set_attr_corr_dims_v_0(corr_dims[0]);
+    // rope_op.set_attr_corr_dims_v_1(corr_dims[1]);
+    // rope_op.set_attr_logf_1_freq_scale(logf_1_freq_scale);
+    // rope_op.set_attr_pos_len(pos_len);
+
+    // 添加RoPE操作到图中并返回
+    graph.AddOp(rope_op);
+    return rope_op;
+}
+
+ge::Operator handle_rope_op_for_deepseek(
+    ge::Graph &graph, struct ggml_tensor *node,
+    std::map<struct ggml_tensor *, ge::Operator> &gmml_tensor_to_ge_op_map,
+    int op_index, ggml_backend_cann_context &cann_ctx) {
+    // 获取源张量
+    struct ggml_tensor *src0 = node->src[0];  // 输入张量
+    struct ggml_tensor *src1 = node->src[1];  // 位置索引张量
+
+    (void)cann_ctx;
+    auto dst = node;
+    GGML_TENSOR_UNARY_OP_LOCALS  // 使用GGML宏获取输入张量的维度
+
+        // 检查算子映射中是否存在输入
+        ge::Operator op_x0;
+    ge::Operator op_x1;
+
+    // 获取src0（主输入）操作符
+    if (gmml_tensor_to_ge_op_map.find(src0) != gmml_tensor_to_ge_op_map.end()) {
+        op_x0 = gmml_tensor_to_ge_op_map[src0];
+    } else {
+        printf("src0 not found in gmml_tensor_to_ge_op_map\n");
+        assert(false);
+    }
+
+    // 获取src1（位置索引）操作符
+    if (gmml_tensor_to_ge_op_map.find(src1) != gmml_tensor_to_ge_op_map.end()) {
+        op_x1 = gmml_tensor_to_ge_op_map[src1];
+    } else {
+        printf("src1 not found in gmml_tensor_to_ge_op_map\n");
+        assert(false);
+    }
+
+    // 从操作参数中获取RoPE配置参数
+    float freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow;
+    // const int n_past     = ((int32_t *) dst->op_params)[0]; // 过去的序列长度
+    const int n_dims = ((int32_t *)node->op_params)[1];  // 特征维度数量
     const int mode = ((int32_t *)node->op_params)[2];    // RoPE模式
     // const int n_ctx      = ((int32_t *) dst->op_params)[3]; // 上下文长度
     const int n_ctx_orig = ((int32_t *)node->op_params)[4];  // 原始上下文长度
@@ -1684,67 +1877,32 @@ ge::Operator handle_rope_op(
     graph.AddOp(perm_x_op);
 
     // 第三步：执行RoPE操作
-    // TODO: 在同一个模型中多个RoPE也可能共享一个sin、cos缓存
-    std::string curr_suffix = "_" + std::to_string(op_index);
-    RopeCache rope_cache(cann_ctx, dst);
-    ge::Operator rope_sin_cache =
-        rope_cache.GetSinOp(graph, "rope_sin_tensor" + curr_suffix);
-    ge::Operator rope_cos_cache =
-        rope_cache.GetCosOp(graph, "rope_cos_tensor" + curr_suffix);
+    std::string name_rope = "rope_rope_" + std::to_string(op_index);
+    ge::op::RopeExtCustom rope_op(name_rope);
 
-    ge::Operator op_x1_squeeze = create_squeeze_op(
-        graph, "rope_squeeze_x1_", curr_suffix, op_x1, {0, 1, 2});
-
-    ge::Operator gather_sin_cache =
-        create_gather_op(graph, "rope_gather_sin_cache_", curr_suffix,
-                         rope_sin_cache, op_x1_squeeze, 1);
-    ge::Operator gather_cos_cache =
-        create_gather_op(graph, "rope_gather_cos_cache_", curr_suffix,
-                         rope_cos_cache, op_x1_squeeze, 1);
-    std::string name_rope = "rope_rope" + curr_suffix;
-    ge::op::RopeExtCustomV2 rope_op(name_rope.c_str());
-
-    // // 设置RoPE操作的输入
-    rope_op.set_input_x(perm_x_op);           // 主输入
-    rope_op.set_input_cos(gather_cos_cache);  // 预先计算好的cos输入
-    rope_op.set_input_sin(gather_sin_cache);  // 预先计算好的sin输入
+    // 设置RoPE操作的输入
+    rope_op.set_input_x(perm_x_op);  // 转置后的输入
+    rope_op.set_input_pos(op_x1);    // 位置索引
 
     // 设置RoPE操作的输出描述
     ge::TensorDesc desc_out_rope(ge::Shape(out_shape_perm_x), ge::FORMAT_ND,
                                  get_data_type(node->type));
     rope_op.update_output_desc_dst(desc_out_rope);
 
-    // 只设置3个属性
+    // 设置RoPE操作的各种属性参数
     rope_op.set_attr_ne0(ne0);
     rope_op.set_attr_ne1(ne1);
-    rope_op.set_attr_pos_len(src0->ne[2]);
-
-    // std::string name_rope = "rope_rope_" + std::to_string(op_index);
-    // ge::op::RopeExtCustom rope_op(name_rope);
-
-    // // 设置RoPE操作的输入
-    // rope_op.set_input_x(perm_x_op);  // 转置后的输入
-    // rope_op.set_input_pos(op_x1);    // 位置索引
-
-    // // 设置RoPE操作的输出描述
-    // ge::TensorDesc desc_out_rope(ge::Shape(out_shape_perm_x), ge::FORMAT_ND,
-    //                              get_data_type(node->type));
-    // rope_op.update_output_desc_dst(desc_out_rope);
-
-    // // 设置RoPE操作的各种属性参数
-    // rope_op.set_attr_ne0(ne0);
-    // rope_op.set_attr_ne1(ne1);
-    // rope_op.set_attr_s1(s01);
-    // rope_op.set_attr_s2(s02);
-    // rope_op.set_attr_n_dims(n_dims);
-    // rope_op.set_attr_freq_scale(freq_scale);
-    // rope_op.set_attr_theta_scale(theta_scale);
-    // rope_op.set_attr_ext_factor(ext_factor);
-    // rope_op.set_attr_attn_factor(attn_factor);
-    // rope_op.set_attr_corr_dims_v_0(corr_dims[0]);
-    // rope_op.set_attr_corr_dims_v_1(corr_dims[1]);
-    // rope_op.set_attr_logf_1_freq_scale(logf_1_freq_scale);
-    // rope_op.set_attr_pos_len(pos_len);
+    rope_op.set_attr_s1(s01);
+    rope_op.set_attr_s2(s02);
+    rope_op.set_attr_n_dims(n_dims);
+    rope_op.set_attr_freq_scale(freq_scale);
+    rope_op.set_attr_theta_scale(theta_scale);
+    rope_op.set_attr_ext_factor(ext_factor);
+    rope_op.set_attr_attn_factor(attn_factor);
+    rope_op.set_attr_corr_dims_v_0(corr_dims[0]);
+    rope_op.set_attr_corr_dims_v_1(corr_dims[1]);
+    rope_op.set_attr_logf_1_freq_scale(logf_1_freq_scale);
+    rope_op.set_attr_pos_len(pos_len);
 
     // 添加RoPE操作到图中
     graph.AddOp(rope_op);
@@ -1802,6 +1960,7 @@ ge::Operator handle_rope_op(
     // 返回最终操作
     return op_reshape_dst;
 }
+
 
 /**
  * @brief 处理ARANGE（等差数列生成）操作的函数
@@ -2641,7 +2800,9 @@ ge::Operator handle_flash_attn_prompt_op(
     float scale_value = params->scaleValue;
 
     // 设置属性值，匹配 PromptFlashAttention 算子的规范
-    int64_t num_key_value_heads = num_heads;
+    // 最稳妥：直接依据 key 张量形状推断 KV 头数，避免上游误传
+    ggml_tensor* key_tensor_src = node->src[1];
+    int64_t num_key_value_heads = key_tensor_src ? key_tensor_src->ne[1] : key_num_heads;
     std::string input_layout = "BSND";  // 默认输入布局
     int64_t pre_tokens = 2147483647;  // 匹配默认值 214748647 -> 2147483647
     int64_t next_tokens = 0;

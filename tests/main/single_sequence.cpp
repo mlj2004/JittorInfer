@@ -27,7 +27,8 @@ static bool         is_interacting         = false;
 
 const int         num_inputs         = 3;
 const std::string inputs[num_inputs] = {
-    "I'm thinking a number between 1 and 20, please guess it.\n",
+    // "please tell me a story about a cat.\n",
+    "I'm thinking a number between 1 and 20, please guess it.speak more,not only a number.\n",
     "it's too small.\n",
     "it's too large.\n",
 };
@@ -51,7 +52,10 @@ static struct DefaultMiniParams {
     bool                  use_mlock         = false;  // use mlock to keep model in memory
     bool                  check_tensors     = false;  // validate tensor data
 
-    std::string model = "/root/data/DeepSeek-V2-Lite-Chat-f16.gguf";  // Will be set from command line argument
+    // std::string model = "/root/data/DeepSeek-V2-Lite-Chat-f16.gguf";  // Will be set from command line argument
+    // std::string model = "/root/data/qwen2-0_5b-instruct-fp16.gguf";  // Will be set from command line argument
+    std::string model = "/root/data/qwen2-7b-instruct-fp16.gguf";  // Will be set from command line argument
+    // std::string model = "/root/.cache/huggingface/hub/models--Qwen--Qwen2-0.5B-Instruct-GGUF/snapshots/198f08841147e5196a6a69bd0053690fb1fd3857/qwen2-0_5b-instruct-fp16.gguf";  // Will be set from command line argument
 
     uint32_t n_ctx = 2048;                                            // context size
 

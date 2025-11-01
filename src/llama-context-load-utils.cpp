@@ -1,4 +1,5 @@
 #include <cstring>
+#include <cstdlib>
 #include <mutex>
 #include <thread>
 
@@ -43,6 +44,14 @@ struct llama_context * llama_init_from_model(struct llama_model * model, struct 
 
     // build cparams by hparams and params.
     build_cparams_by_params_and_hparams(cparams, params, hparams);
+
+    // 将模型架构与名称暴露为环境变量，供后端（如 GE 图构建）进行策略选择
+    {
+        const std::string arch_name = model->arch_name();
+        const std::string model_name = model->name;
+        setenv("LLAMA_MODEL_ARCH", arch_name.c_str(), 1);
+        setenv("LLAMA_MODEL_NAME", model_name.c_str(), 1);
+    }
 
     ctx->logits_all = params.logits_all;
 
