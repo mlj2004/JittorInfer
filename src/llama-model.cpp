@@ -948,7 +948,6 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                 break;
             case LLM_ARCH_QWEN3:
                 {
-
                 }
                 break;
             default:

@@ -156,8 +156,7 @@ static int32_t llm_chat_apply_template(llm_chat_template tmpl, const std::vector
         if (add_ass) {
             ss << "<|im_start|>assistant\n";
         }
-    }
-    else {
+    } else {
         // template not supported
         return -1;
     }
