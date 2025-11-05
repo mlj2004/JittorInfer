@@ -1549,9 +1549,10 @@ ge::Operator handle_rope_op(
     float freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow;
     // const int n_past     = ((int32_t *) dst->op_params)[0]; // 过去的序列长度
     const int n_dims = ((int32_t *)node->op_params)[1];  // 特征维度数量
-    const int mode_param = ((int32_t *)node->op_params)[2];    // RoPE模式(原始)
-    // const int mode = (mode_param == 1) ? 1 : 0;                 // 归一化为0/1
-    // const int n_ctx      = ((int32_t *) dst->op_params)[3]; // 上下文长度
+    const int mode_param = ((int32_t *)node->op_params)[2];  // RoPE模式(原始)
+    // const int mode = (mode_param == 1) ? 1 : 0;                 //
+    // 归一化为0/1 const int n_ctx      = ((int32_t *) dst->op_params)[3]; //
+    // 上下文长度
     const int n_ctx_orig = ((int32_t *)node->op_params)[4];  // 原始上下文长度
 
     // 复制浮点参数
@@ -1586,7 +1587,8 @@ ge::Operator handle_rope_op(
 
     const float logf_1_freq_scale = logf(1.0f / freq_scale);
 
-    /* 使用内置 RotaryPositionEmbedding：保持 x 为 4D (B,S,N,D)，不再做 5D 变形 */
+    /* 使用内置 RotaryPositionEmbedding：保持 x 为 4D (B,S,N,D)，不再做 5D 变形
+     */
 
     // 第三步：执行RoPE操作
     // TODO: 在同一个模型中多个RoPE也可能共享一个sin、cos缓存
@@ -1607,22 +1609,24 @@ ge::Operator handle_rope_op(
         create_gather_op(graph, "rope_gather_cos_cache_", curr_suffix,
                          rope_cos_cache, op_x1_squeeze, 1);
 
-    // 将 cos/sin 在最后一维 Tile 一次，使 D 与 x 的 D 一致（从 dim//2 扩展到 dim）
-    // 构造 multiples 常量 [1, 1, 1, 2]
+    // 将 cos/sin 在最后一维 Tile 一次，使 D 与 x 的 D 一致（从 dim//2 扩展到
+    // dim） 构造 multiples 常量 [1, 1, 1, 2]
     std::vector<int32_t> multiples_vec = {1, 1, 1, 2};
-    ge::op::Const cos_multiples_const_op(("rope_cos_tile_multiples" + curr_suffix).c_str());
+    ge::op::Const cos_multiples_const_op(
+        ("rope_cos_tile_multiples" + curr_suffix).c_str());
     {
         ge::TensorDesc desc(ge::Shape({4}), ge::FORMAT_ND, ge::DT_INT32);
-        ge::Tensor tens(desc, reinterpret_cast<uint8_t*>(multiples_vec.data()),
+        ge::Tensor tens(desc, reinterpret_cast<uint8_t *>(multiples_vec.data()),
                         multiples_vec.size() * sizeof(int32_t));
         cos_multiples_const_op.set_attr_value(tens);
         graph.AddOp(cos_multiples_const_op);
     }
 
-    ge::op::Const sin_multiples_const_op(("rope_sin_tile_multiples" + curr_suffix).c_str());
+    ge::op::Const sin_multiples_const_op(
+        ("rope_sin_tile_multiples" + curr_suffix).c_str());
     {
         ge::TensorDesc desc(ge::Shape({4}), ge::FORMAT_ND, ge::DT_INT32);
-        ge::Tensor tens(desc, reinterpret_cast<uint8_t*>(multiples_vec.data()),
+        ge::Tensor tens(desc, reinterpret_cast<uint8_t *>(multiples_vec.data()),
                         multiples_vec.size() * sizeof(int32_t));
         sin_multiples_const_op.set_attr_value(tens);
         graph.AddOp(sin_multiples_const_op);
@@ -1633,7 +1637,8 @@ ge::Operator handle_rope_op(
     cos_tile_op.set_input_x(gather_cos_cache);
     cos_tile_op.set_input_multiples(cos_multiples_const_op);
     {
-        std::vector<int64_t> cos_out_shape = {src0->ne[3], src0->ne[2], 1, src0->ne[0]};
+        std::vector<int64_t> cos_out_shape = {src0->ne[3], src0->ne[2], 1,
+                                              src0->ne[0]};
         ge::TensorDesc out_desc(ge::Shape(cos_out_shape), ge::FORMAT_ND,
                                 get_data_type(node->type));
         cos_tile_op.update_output_desc_y(out_desc);
@@ -1644,7 +1649,8 @@ ge::Operator handle_rope_op(
     sin_tile_op.set_input_x(gather_sin_cache);
     sin_tile_op.set_input_multiples(sin_multiples_const_op);
     {
-        std::vector<int64_t> sin_out_shape = {src0->ne[3], src0->ne[2], 1, src0->ne[0]};
+        std::vector<int64_t> sin_out_shape = {src0->ne[3], src0->ne[2], 1,
+                                              src0->ne[0]};
         ge::TensorDesc out_desc(ge::Shape(sin_out_shape), ge::FORMAT_ND,
                                 get_data_type(node->type));
         sin_tile_op.update_output_desc_y(out_desc);
@@ -1658,7 +1664,7 @@ ge::Operator handle_rope_op(
     rope_op.set_input_x(op_x0);
     rope_op.set_input_cos(cos_tile_op);
     rope_op.set_input_sin(sin_tile_op);
-    
+
     // 设置RoPE模式
     rope_op.set_attr_mode(0);
     // 设置RoPE操作的输出描述（与 x 相同形状 4D）
@@ -1960,7 +1966,6 @@ ge::Operator handle_rope_op_for_deepseek(
     // 返回最终操作
     return op_reshape_dst;
 }
-
 
 /**
  * @brief 处理ARANGE（等差数列生成）操作的函数
@@ -2801,8 +2806,9 @@ ge::Operator handle_flash_attn_prompt_op(
 
     // 设置属性值，匹配 PromptFlashAttention 算子的规范
     // 最稳妥：直接依据 key 张量形状推断 KV 头数，避免上游误传
-    ggml_tensor* key_tensor_src = node->src[1];
-    int64_t num_key_value_heads = key_tensor_src ? key_tensor_src->ne[1] : key_num_heads;
+    ggml_tensor *key_tensor_src = node->src[1];
+    int64_t num_key_value_heads =
+        key_tensor_src ? key_tensor_src->ne[1] : key_num_heads;
     std::string input_layout = "BSND";  // 默认输入布局
     int64_t pre_tokens = 2147483647;  // 匹配默认值 214748647 -> 2147483647
     int64_t next_tokens = 0;

@@ -21,15 +21,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <functional>
 #include <iostream>
 #include <map>
-#include <vector>
 #include <string>
-#include <algorithm>
-#include <cstdlib>
+#include <vector>
 
 #include "ggml-cann/ascend_graph_ops.h"
 
@@ -254,7 +254,8 @@ void process_input_tensors(
             ge::TensorDesc desc = create_tensor_desc_for_node(node);
 
             // 为此输入创建数据算子
-            std::string name = name_prefix + std::string(node->name) + "_" + std::to_string(index);
+            std::string name = name_prefix + std::string(node->name) + "_" +
+                               std::to_string(index);
 
             // std::cout << "create_data: " << name << std::endl;
 
@@ -281,12 +282,12 @@ void process_input_tensors(
                 src->op != GGML_OP_NONE) {
                 continue;
             }
-            create_data(src,i*100000+j);
+            create_data(src, i * 100000 + j);
         }
         if (ggml_is_empty(node) || node->op != GGML_OP_NONE) {
             continue;
         }
-        create_data(node,i*100000);
+        create_data(node, i * 100000);
     }
 }
 
@@ -561,16 +562,24 @@ ge::Graph build_ascend_graph(ggml_cgraph* cgraph,
             case GGML_OP_ROPE: {
                 // 处理旋转位置编码(RoPE)操作
                 // 根据模型名称/架构选择不同的 RoPE 实现（默认使用通用版本）
-                const char * arch_env = std::getenv("LLAMA_MODEL_ARCH");
-                const char * name_env = std::getenv("LLAMA_MODEL_NAME");
-                std::string model_tag = arch_env ? std::string(arch_env)
-                                                 : (name_env ? std::string(name_env) : std::string());
-                std::transform(model_tag.begin(), model_tag.end(), model_tag.begin(), ::tolower);
-                const bool use_deepseek_rope = (model_tag.find("deepseek") != std::string::npos);
+                const char* arch_env = std::getenv("LLAMA_MODEL_ARCH");
+                const char* name_env = std::getenv("LLAMA_MODEL_NAME");
+                std::string model_tag =
+                    arch_env
+                        ? std::string(arch_env)
+                        : (name_env ? std::string(name_env) : std::string());
+                std::transform(model_tag.begin(), model_tag.end(),
+                               model_tag.begin(), ::tolower);
+                const bool use_deepseek_rope =
+                    (model_tag.find("deepseek") != std::string::npos);
 
-                Operator rope_op = use_deepseek_rope
-                    ? handle_rope_op_for_deepseek(graph, node, ggml_tensor_to_ge_op_map, i, cann_ctx)
-                    : handle_rope_op(graph, node, ggml_tensor_to_ge_op_map, i, cann_ctx);
+                Operator rope_op =
+                    use_deepseek_rope
+                        ? handle_rope_op_for_deepseek(graph, node,
+                                                      ggml_tensor_to_ge_op_map,
+                                                      i, cann_ctx)
+                        : handle_rope_op(graph, node, ggml_tensor_to_ge_op_map,
+                                         i, cann_ctx);
 
                 ggml_tensor_to_ge_op_map[node] = rope_op;
                 if (node == last_op_node) {

@@ -114,7 +114,7 @@ struct ggml_cgraph * llm_qwen2_context_ge::build_qwen2_ge() {
         }
 
         cur = ggml_add(ctx0, cur, ffn_inp);
-        
+
         if (lctx.enable_dp_gather && lctx.self_token_size > 0) {
             GGML_ABORT("dp is not implemented.");
         }

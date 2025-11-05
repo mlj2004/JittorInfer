@@ -1,5 +1,5 @@
-#include <cstring>
 #include <cstdlib>
+#include <cstring>
 #include <mutex>
 #include <thread>
 
@@ -47,7 +47,7 @@ struct llama_context * llama_init_from_model(struct llama_model * model, struct 
 
     // 将模型架构与名称暴露为环境变量，供后端（如 GE 图构建）进行策略选择
     {
-        const std::string arch_name = model->arch_name();
+        const std::string arch_name  = model->arch_name();
         const std::string model_name = model->name;
         setenv("LLAMA_MODEL_ARCH", arch_name.c_str(), 1);
         setenv("LLAMA_MODEL_NAME", model_name.c_str(), 1);
