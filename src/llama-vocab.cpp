@@ -489,7 +489,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
             if (tokenizer_pre == "deepseek-llm") {
                 pre_type     = LLAMA_VOCAB_PRE_TYPE_DEEPSEEK_LLM;
                 clean_spaces = false;
-            } else if (tokenizer_pre == "qwen2" || tokenizer_pre == "deepseek-r1-qwen") {
+            } else if (tokenizer_pre == "qwen2" || tokenizer_pre == "qwen2.5" || tokenizer_pre == "qwen-2.5" || tokenizer_pre == "deepseek-r1-qwen") {
                 pre_type     = LLAMA_VOCAB_PRE_TYPE_QWEN2;
                 clean_spaces = false;
             }

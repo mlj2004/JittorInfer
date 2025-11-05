@@ -103,8 +103,8 @@ static llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
         return LLM_CHAT_TEMPLATE_DEEPSEEK_2;
     }
     if (tmpl_contains("<|im_start|>") && tmpl_contains("<|im_end|>")) {
-        // 识别到 ChatML/Jinja 风格，回落到 QWEN2 模板
-        return LLM_CHAT_TEMPLATE_QWEN2;
+        // 识别到 ChatML/Jinja 风格，使用 ChatML 模板
+        return LLM_CHAT_TEMPLATE_CHATML;
     }
     if (tmpl_contains("Assistant:") && tmpl_contains("User:")) {
         // 简单启发式：若传入的是类似 DeepSeek/Qwen2 的纯文本模板，则回落到 QWEN2 格式
@@ -135,7 +135,7 @@ static int32_t llm_chat_apply_template(llm_chat_template tmpl, const std::vector
             ss << "Assistant:";
         }
     } else if (tmpl == LLM_CHAT_TEMPLATE_QWEN2) {
-        // Qwen2：按 DeepSeek-V2 相同的简单文本格式拼接
+        // Qwen2：按简单的“User/Assistant”文本格式拼接（不引入 DeepSeek 的特殊结束 token）
         for (const auto * message : chat) {
             std::string role(message->role);
             if (role == "system") {
@@ -143,13 +143,21 @@ static int32_t llm_chat_apply_template(llm_chat_template tmpl, const std::vector
             } else if (role == "user") {
                 ss << "User: " << message->content << "\n\n";
             } else if (role == "assistant") {
-                ss << "Assistant: " << message->content << LU8("<｜end▁of▁sentence｜>");
+                ss << "Assistant: " << message->content;
             }
         }
         if (add_ass) {
             ss << "Assistant:";
         }
-    } else {
+    } else if (tmpl == LLM_CHAT_TEMPLATE_CHATML) {
+        for (const auto * message : chat) {
+            ss << "<|im_start|>" << message->role << "\n" << message->content << "<|im_end|>\n";
+        }
+        if (add_ass) {
+            ss << "<|im_start|>assistant\n";
+        }
+    }
+    else {
         // template not supported
         return -1;
     }

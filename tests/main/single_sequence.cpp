@@ -25,12 +25,14 @@
 static const char * DEFAULT_SYSTEM_MESSAGE = "You are a helpful assistant";
 static bool         is_interacting         = false;
 
-const int         num_inputs         = 3;
+const int         num_inputs         = 2;
 const std::string inputs[num_inputs] = {
+    "write code of quick sort algorithm in python",
+    "add a test case",
     // "please tell me a story about a cat.\n",
-    "I'm thinking a number between 1 and 20, please guess it.speak more,not only a number.\n",
-    "it's too small.\n",
-    "it's too large.\n",
+    // "I'm thinking a number between 1 and 20, please guess it.don't ask me any questions, just guess the number.\n",
+    // "it's too small.\n",
+    // "it's too large.\n",
 };
 
 static struct local_cpu_params {
@@ -54,10 +56,11 @@ static struct DefaultMiniParams {
 
     // std::string model = "/root/data/DeepSeek-V2-Lite-Chat-f16.gguf";  // Will be set from command line argument
     // std::string model = "/root/data/qwen2-0_5b-instruct-fp16.gguf";  // Will be set from command line argument
-    std::string model = "/root/data/qwen2-7b-instruct-fp16.gguf";  // Will be set from command line argument
+    // std::string model = "/root/data/qwen2-7b-instruct-fp16.gguf";  // Will be set from command line argument
+    std::string model = "/root/data/Qwen2.5-7B-Instruct-f16.gguf";  // Will be set from command line argument
     // std::string model = "/root/.cache/huggingface/hub/models--Qwen--Qwen2-0.5B-Instruct-GGUF/snapshots/198f08841147e5196a6a69bd0053690fb1fd3857/qwen2-0_5b-instruct-fp16.gguf";  // Will be set from command line argument
 
-    uint32_t n_ctx = 2048;                                            // context size
+    uint32_t n_ctx = 32768;                                            // context size
 
     // cpu
     uint32_t n_threads       = 4;                                // number of threads to use for computation
@@ -68,7 +71,7 @@ static struct DefaultMiniParams {
     std::vector<common_adapter_lora_info> lora_adapters;         // lora adapter path with user defined scale
 
     // some runtime parameters
-    int32_t                  n_batch = 4;  // logical batch size for prompt processing (must be >=32 to use BLAS)
+    int32_t                  n_batch = 1;  // logical batch size for prompt processing (must be >=32 to use BLAS)
     bool                     enable_chat_template = true;
     bool                     escape               = true;
     common_conversation_mode conversation_mode    = COMMON_CONVERSATION_MODE_ENABLED;

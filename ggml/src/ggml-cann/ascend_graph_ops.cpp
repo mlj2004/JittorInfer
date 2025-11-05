@@ -1660,7 +1660,7 @@ ge::Operator handle_rope_op(
     rope_op.set_input_sin(sin_tile_op);
     
     // 设置RoPE模式
-    rope_op.set_attr_mode(1);
+    rope_op.set_attr_mode(0);
     // 设置RoPE操作的输出描述（与 x 相同形状 4D）
     {
         std::vector<int64_t> output_shape = build_output_shape(node);

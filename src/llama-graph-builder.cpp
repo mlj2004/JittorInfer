@@ -98,6 +98,8 @@ struct ggml_cgraph * llama_graph_builder::llama_build_graph(llama_context &     
                 return llm_build_deepseek2_ge(lctx, buf_compute_meta, ubatch, cb, worst_case, print_layer);
             case LLM_ARCH_QWEN2:
                 return llm_build_qwen2_ge(lctx, buf_compute_meta, ubatch, cb, worst_case, print_layer);
+            // case LLM_ARCH_QWEN3:
+            //     return llm_build_qwen3_ge(lctx, buf_compute_meta, ubatch, cb, worst_case, print_layer);
             default:
                 GGML_ABORT("Unsupported model architecture");
         }
