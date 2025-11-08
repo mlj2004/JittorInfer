@@ -36,6 +36,7 @@ enum llm_chat_template {
     LLM_CHAT_TEMPLATE_DEEPSEEK_2,
     LLM_CHAT_TEMPLATE_DEEPSEEK_3,
     LLM_CHAT_TEMPLATE_QWEN2,
+    LLM_CHAT_TEMPLATE_QWEN3,
     LLM_CHAT_TEMPLATE_COMMAND_R,
     LLM_CHAT_TEMPLATE_LLAMA_3,
     LLM_CHAT_TEMPLATE_CHATGML_3,
@@ -74,6 +75,7 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
     { "deepseek2",         LLM_CHAT_TEMPLATE_DEEPSEEK_2        },
     { "deepseek3",         LLM_CHAT_TEMPLATE_DEEPSEEK_3        },
     { "qwen2",             LLM_CHAT_TEMPLATE_QWEN2             },
+    { "qwen3",             LLM_CHAT_TEMPLATE_QWEN3             },
     { "command-r",         LLM_CHAT_TEMPLATE_COMMAND_R         },
     { "llama3",            LLM_CHAT_TEMPLATE_LLAMA_3           },
     { "chatglm3",          LLM_CHAT_TEMPLATE_CHATGML_3         },
@@ -103,7 +105,7 @@ static llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
         return LLM_CHAT_TEMPLATE_DEEPSEEK_2;
     }
     if (tmpl_contains("<|im_start|>") && tmpl_contains("<|im_end|>")) {
-        // 识别到 ChatML/Jinja 风格，使用 ChatML 模板
+        // 识别到 ChatML/Jinja 风格，使用 ChatML 模板，Qwen2.5 和 Qwen3 都使用这个模板
         return LLM_CHAT_TEMPLATE_CHATML;
     }
     if (tmpl_contains("Assistant:") && tmpl_contains("User:")) {

@@ -16,6 +16,7 @@
 #include "llama-graph-defrag.h"
 #include "llama-graph-qwen2.h"
 #include "llama-graph-qwen2ge.h"
+#include "llama-graph-qwen3ge.h"
 #include "llama-graph-utils.h"
 #include "llama-impl.h"
 
@@ -98,8 +99,8 @@ struct ggml_cgraph * llama_graph_builder::llama_build_graph(llama_context &     
                 return llm_build_deepseek2_ge(lctx, buf_compute_meta, ubatch, cb, worst_case, print_layer);
             case LLM_ARCH_QWEN2:
                 return llm_build_qwen2_ge(lctx, buf_compute_meta, ubatch, cb, worst_case, print_layer);
-            // case LLM_ARCH_QWEN3:
-            //     return llm_build_qwen3_ge(lctx, buf_compute_meta, ubatch, cb, worst_case, print_layer);
+            case LLM_ARCH_QWEN3:
+                return llm_build_qwen3_ge(lctx, buf_compute_meta, ubatch, cb, worst_case, print_layer);
             default:
                 GGML_ABORT("Unsupported model architecture");
         }
@@ -155,6 +156,9 @@ void llama_graph_builder::llama_update_graph(llama_context & lctx, const llama_u
                 break;
             case LLM_ARCH_QWEN2:
                 llm_update_qwen2_ge(lctx);
+                break;
+            case LLM_ARCH_QWEN3:
+                llm_update_qwen3_ge(lctx);
                 break;
             default:
                 GGML_ABORT("Unsupported model architecture");
