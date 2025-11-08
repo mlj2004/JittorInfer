@@ -77,7 +77,7 @@ struct ggml_cgraph * llm_qwen3_context_ge::build_qwen3_ge() {
             // apply q_norm
             Qcur = llm_build_norm(ctx0, Qcur, hparams, model.layers[il].attn_q_norm, NULL, LLM_NORM_RMS, cb, il, true);
             cb(Qcur, "Qcur_normed", il);
-            
+
             Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos, nullptr, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
                                  ext_factor, attn_factor, beta_fast, beta_slow);
             cb(Qcur, "Qcur", il);
@@ -86,7 +86,7 @@ struct ggml_cgraph * llm_qwen3_context_ge::build_qwen3_ge() {
             // apply k_norm
             Kcur = llm_build_norm(ctx0, Kcur, hparams, model.layers[il].attn_k_norm, NULL, LLM_NORM_RMS, cb, il, true);
             cb(Kcur, "Kcur_normed", il);
-            
+
             Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos, nullptr, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
                                  ext_factor, attn_factor, beta_fast, beta_slow);
             cb(Kcur, "Kcur", il);
