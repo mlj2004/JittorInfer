@@ -76,6 +76,7 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
     { "deepseek3",         LLM_CHAT_TEMPLATE_DEEPSEEK_3        },
     { "qwen2",             LLM_CHAT_TEMPLATE_QWEN2             },
     { "qwen3",             LLM_CHAT_TEMPLATE_QWEN3             },
+    { "qwen3moe",          LLM_CHAT_TEMPLATE_QWEN3             },
     { "command-r",         LLM_CHAT_TEMPLATE_COMMAND_R         },
     { "llama3",            LLM_CHAT_TEMPLATE_LLAMA_3           },
     { "chatglm3",          LLM_CHAT_TEMPLATE_CHATGML_3         },

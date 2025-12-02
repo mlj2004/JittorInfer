@@ -2409,15 +2409,23 @@ ge::Operator handle_moe_fused_op(
     finalize_op.set_input_expert_idx(expert_idx_squeeze_op,
                                      0);  // 使用第3个输出 expanded_expert_idx
 
-    // 设置最终输出描述
+// 设置 MoeFinalizeRouting 的输出描述 (2D)
     // 参考 ggml_cann_moe_fused: f_dst_ne[2] = {hidden_dim, seq_len}
-    std::vector<int64_t> final_shape = {hidden_dim, seq_len};
-    ge::TensorDesc final_desc(ge::Shape(final_shape), ge::FORMAT_ND,
+    std::vector<int64_t> finalize_shape = {hidden_dim, seq_len};
+    ge::TensorDesc finalize_desc(ge::Shape(finalize_shape), ge::FORMAT_ND,
                               get_data_type(node->type));
-    finalize_op.update_output_desc_y(final_desc);
+    finalize_op.update_output_desc_y(finalize_desc);
     graph.AddOp(finalize_op);
 
-    return finalize_op;
+    // 将 2D 输出 reshape 回 4D，以匹配 GGML 定义的输出形状
+    // ggml_moe_fused_fp16 定义输出为 4D: [n_embd, n_tokens, 1, 1]
+    // 在 GE 中维度是反转的，所以是 [1, 1, n_tokens, n_embd]
+    std::vector<int64_t> output_shape = build_output_shape(node);
+    std::string reshape_name = "moe_output_reshape" + op_suffix;
+    ge::Operator output_reshape_op = create_reshape_op(
+        graph, finalize_op, output_shape, reshape_name, get_data_type(node->type));
+
+    return output_reshape_op;
 }
 
 /**
@@ -3011,4 +3019,140 @@ ge::Operator handle_get_rows_op(
         get_data_type(node->type));
     op_cast_result.UpdateOutputDesc((uint32_t)0, result_desc);
     return op_cast_result;
+}
+
+
+/**
+ * @brief 处理DIV（除法）操作的函数
+ *
+ * 在计算图中创建一个除法操作，计算 x1/x2
+ * 支持形状不同时的广播处理
+ *
+ * @param graph 计算图引用
+ * @param node 表示DIV操作的张量节点
+ * @param gmml_tensor_to_ge_op_map 张量到对应算子的映射
+ * @param op_index 用于生成唯一算子名称的索引
+ * @return 创建的DIV算子
+ */
+ge::Operator handle_div_op(
+    ge::Graph &graph, struct ggml_tensor *node,
+    std::map<struct ggml_tensor *, ge::Operator> &gmml_tensor_to_ge_op_map,
+    int op_index) {
+    ggml_tensor *src0 = node->src[0];
+    ggml_tensor *src1 = node->src[1];
+
+    ge::Operator op_x1, op_x2;
+    // 处理src0 - 获取现有算子
+    if (gmml_tensor_to_ge_op_map.find(src0) != gmml_tensor_to_ge_op_map.end()) {
+        op_x1 = gmml_tensor_to_ge_op_map[src0];
+    } else {
+        assert(false);
+    }
+
+    // 处理src1 - 获取现有算子
+    if (gmml_tensor_to_ge_op_map.find(src1) != gmml_tensor_to_ge_op_map.end()) {
+        op_x2 = gmml_tensor_to_ge_op_map[src1];
+    } else {
+        assert(false);
+    }
+
+    // 处理广播情况
+    int64_t out_ne[GGML_MAX_DIMS], nb0[GGML_MAX_DIMS], nb1[GGML_MAX_DIMS];
+    bool need_tile0[GGML_MAX_DIMS], need_tile1[GGML_MAX_DIMS];
+    bcast_shape(src0, src1, out_ne, nb0, nb1, need_tile0, need_tile1);
+
+    // 处理需要平铺的情况
+    if (std::any_of(need_tile0, need_tile0 + GGML_MAX_DIMS,
+                    [](bool x) { return x; })) {
+        op_x1 =
+            handle_repeat_op(graph, node, gmml_tensor_to_ge_op_map, op_index);
+    }
+    if (std::any_of(need_tile1, need_tile1 + GGML_MAX_DIMS,
+                    [](bool x) { return x; })) {
+        ggml_tensor *saved = node->src[0];
+        node->src[0] = node->src[1];
+        op_x2 =
+            handle_repeat_op(graph, node, gmml_tensor_to_ge_op_map, op_index);
+        node->src[0] = saved;
+    }
+
+    // 创建除法算子
+    std::string div_name = "div_" + std::to_string(op_index);
+    ge::op::Div div_op(div_name);
+    div_op.set_input_x1(op_x1);
+    div_op.set_input_x2(op_x2);
+
+    // 设置输出形状和数据类型
+    std::vector<int64_t> output_shape = build_output_shape(node);
+    ge::DataType dataType = get_data_type(node->type);
+    ge::TensorDesc desc(ge::Shape(output_shape), ge::FORMAT_ND, dataType);
+    div_op.update_output_desc_y(desc);
+
+    // 将算子添加到图中
+    graph.AddOp(div_op);
+    return div_op;
+}
+
+/**
+ * @brief 处理SUM_ROWS操作的函数
+ *
+ * 实现沿最后一个维度（dim=3）对张量进行求和的操作
+ * 对应 GGML_OP_SUM_ROWS
+ *
+ * @param graph 计算图引用
+ * @param node 表示SUM_ROWS操作的张量节点
+ * @param gmml_tensor_to_ge_op_map 张量到对应算子的映射
+ * @param op_index 用于生成唯一算子名称的索引
+ * @return 创建的ReduceSum算子
+ */
+ge::Operator handle_sum_rows_op(
+    ge::Graph &graph, struct ggml_tensor *node,
+    std::map<struct ggml_tensor *, ge::Operator> &gmml_tensor_to_ge_op_map,
+    int op_index) {
+    struct ggml_tensor *src = node->src[0];
+    ge::Operator op_x;
+
+    // 获取输入算子
+    if (gmml_tensor_to_ge_op_map.count(src)) {
+        op_x = gmml_tensor_to_ge_op_map[src];
+    } else {
+        assert(false && "SUM_ROWS: missing src in gmml_tensor_to_ge_op_map");
+    }
+
+    std::string op_suffix = std::to_string(op_index);
+
+    // 创建ReduceSum算子
+    std::string reduce_sum_name = "sum_rows_" + op_suffix;
+    ge::op::ReduceSum reduce_sum_op(reduce_sum_name);
+
+    // 创建reduction维度常量 - 沿最后一个维度求和
+    // GGML的ggml_sum_rows沿dim=0求和，GE中维度是反转的，所以对应GE的最后一个维度
+    // 计算输入张量的实际维度数，然后使用最后一个维度的正索引
+    std::vector<int64_t> input_shape = build_output_shape(src);
+    int32_t last_dim_idx = static_cast<int32_t>(input_shape.size() - 1);
+    
+    std::string reduce_axes_const_name = "sum_rows_axes_const_" + op_suffix;
+    ge::op::Const reduce_axes_const_op(reduce_axes_const_name);
+    std::vector<int32_t> reduce_axes = {last_dim_idx};  // 动态计算最后一个维度的索引
+    ge::TensorDesc reduce_axes_desc(ge::Shape({1}), ge::FORMAT_ND, ge::DT_INT32);
+    ge::Tensor reduce_axes_tensor(
+        reduce_axes_desc, reinterpret_cast<uint8_t *>(reduce_axes.data()),
+        reduce_axes.size() * sizeof(int32_t));
+    reduce_axes_const_op.set_attr_value(reduce_axes_tensor);
+    graph.AddOp(reduce_axes_const_op);
+
+    // 设置ReduceSum的输入和属性
+    reduce_sum_op.set_input_x(op_x);
+    reduce_sum_op.set_input_axes(reduce_axes_const_op);
+    reduce_sum_op.set_attr_keep_dims(true);  // 保持维度，输出ne[0]=1
+
+    // 设置输出描述
+    std::vector<int64_t> output_shape = build_output_shape(node);
+    ge::DataType dt = get_data_type(node->type);
+    ge::TensorDesc output_desc(ge::Shape(output_shape), ge::FORMAT_ND, dt);
+    reduce_sum_op.update_output_desc_y(output_desc);
+
+    graph.AddOp(reduce_sum_op);
+
+    return reduce_sum_op;
 }

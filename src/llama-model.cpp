@@ -947,7 +947,7 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                 }
                 break;
             case LLM_ARCH_QWEN3:
-                {
+                {                    
                     tok_embd =
                         create_tensor({ n_embd, n_vocab }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_TOKEN_EMBD, "weight"), 0);
 
@@ -981,7 +981,7 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                                                  tn(LLM_TENSOR_ATTN_V, "weight", i), 0);
                         layer.wo = create_tensor({ n_embd_head_k * n_head, n_embd }, LLM_SPLIT_REPEAT,
                                                  tn(LLM_TENSOR_ATTN_OUT, "weight", i), 0);
-
+                        
                         layer.ffn_norm =
                             create_tensor({ n_embd }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_FFN_NORM, "weight", i), 0);
 
@@ -991,6 +991,67 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                             create_tensor({ n_ff, n_embd }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_FFN_DOWN, "weight", i), 0);
                         layer.ffn_up =
                             create_tensor({ n_embd, n_ff }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_FFN_UP, "weight", i), 0);
+                    }
+                }
+                break;
+            case LLM_ARCH_QWEN3MOE:
+                {
+                    const int64_t n_ff_exp        = hparams.n_ff_exp;                 
+                    tok_embd =
+                        create_tensor({ n_embd, n_vocab }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_TOKEN_EMBD, "weight"), 0);
+
+                    // output
+                    output      = create_tensor({ n_embd, n_vocab }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_OUTPUT, "weight"),
+                                                TENSOR_NOT_REQUIRED);
+                    output_norm = create_tensor({ n_embd }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_OUTPUT_NORM, "weight"), 0);
+                    // output      = create_tensor({ n_embd, n_vocab }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_OUTPUT, "weight"),
+                    //                            TENSOR_NOT_REQUIRED);
+                    
+                    // if output is NULL, init from the input tok embed
+                    if (output == NULL) {
+                        output = create_tensor({ n_embd, n_vocab }, LLM_SPLIT_REPEAT,
+                                               tn(LLM_TENSOR_TOKEN_EMBD, "weight"), TENSOR_DUPLICATED);
+                    }
+
+                    for (int i = 0; i < n_layer; ++i) {
+                        auto & layer = layers[i];
+
+                        layer.attn_norm =
+                            create_tensor({ n_embd }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_ATTN_NORM, "weight", i), 0);
+                        layer.wq = create_tensor({ n_embd, n_embd_head_k * n_head }, LLM_SPLIT_REPEAT,
+                                                 tn(LLM_TENSOR_ATTN_Q, "weight", i), 0);
+
+                        layer.attn_q_norm = create_tensor({ n_embd_head_k }, LLM_SPLIT_REPEAT,
+                                                          tn(LLM_TENSOR_ATTN_Q_NORM, "weight", i), 0);
+
+                        layer.wk          = create_tensor({ n_embd, n_embd_gqa }, LLM_SPLIT_REPEAT,
+                                                          tn(LLM_TENSOR_ATTN_K, "weight", i), 0);
+                        layer.attn_k_norm = create_tensor({ n_embd_head_k }, LLM_SPLIT_REPEAT,
+                                                          tn(LLM_TENSOR_ATTN_K_NORM, "weight", i), 0);
+
+                        layer.wv = create_tensor({ n_embd, n_embd_gqa }, LLM_SPLIT_REPEAT,
+                                                 tn(LLM_TENSOR_ATTN_V, "weight", i), 0);
+                        layer.wo = create_tensor({ n_embd_head_k * n_head, n_embd }, LLM_SPLIT_REPEAT,
+                                                 tn(LLM_TENSOR_ATTN_OUT, "weight", i), 0);
+                        // todo: some condition: load dense ffn
+                        layer.ffn_gate_exps = 
+                            create_tensor({ n_embd, n_ff_exp, n_expert }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_FFN_GATE_EXPS, "weight", i), 0);
+                                
+                        layer.ffn_down_exps =
+                            create_tensor({ n_ff_exp, n_embd, n_expert }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_FFN_DOWN_EXPS, "weight", i), 0);
+                                
+                        layer.ffn_up_exps =
+                            create_tensor({ n_embd, n_ff_exp, n_expert }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_FFN_UP_EXPS, "weight", i), 0);
+                        
+                        layer.ffn_gate_inp = 
+                            create_tensor({ n_embd, n_expert }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_FFN_GATE_INP, "weight", i), 0);
+
+                        layer.ffn_exp_probs_b =
+                            create_tensor({ n_expert }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_FFN_EXP_PROBS_B, "bias", i), TENSOR_NOT_REQUIRED);
+
+                        layer.ffn_norm =
+                            create_tensor({ n_embd }, LLM_SPLIT_REPEAT, tn(LLM_TENSOR_FFN_NORM, "weight", i), 0);
+                        
                     }
                 }
                 break;
@@ -1388,6 +1449,29 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 }
             }
             break;
+        case LLM_ARCH_QWEN3MOE:
+            {
+                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
+                ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH, hparams.n_ff_exp);
+
+                ml.get_key(LLM_KV_EXPERT_WEIGHTS_SCALE, hparams.expert_weights_scale, false);
+                ml.get_key(LLM_KV_EXPERT_WEIGHTS_NORM, hparams.expert_weights_norm, false);
+                ml.get_key(LLM_KV_EXPERT_GATING_FUNC, hparams.expert_gating_func, false);
+                if (hparams.expert_gating_func == LLAMA_EXPERT_GATING_FUNC_TYPE_NONE) {
+                    // for compatibility with existing DeepSeek V2 and V2.5 GGUFs
+                    // that have no expert_gating_func model parameter set
+                    hparams.expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX;
+                }
+                switch (hparams.n_layer) {
+                    case 48:
+                        type = LLM_TYPE_30B;
+                        break;
+                    default:
+                        type = LLM_TYPE_UNKNOWN;
+                }
+            }
+            break;
+        
         default:
             throw std::runtime_error("unsupported model architecture");
     }
@@ -1534,6 +1618,7 @@ enum llama_rope_type llama_model_rope_type(const struct llama_model * model) {
         case LLM_ARCH_QWEN2:
         case LLM_ARCH_QWEN2MOE:
         case LLM_ARCH_QWEN3:
+        case LLM_ARCH_QWEN3MOE:
         case LLM_ARCH_OLMO2:
         case LLM_ARCH_OLMOE:
         case LLM_ARCH_PHI2:

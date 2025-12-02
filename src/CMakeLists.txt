@@ -24,6 +24,7 @@ add_library(llama
             llama-graph-qwen2ge.cpp
             llama-graph-qwen3.cpp
             llama-graph-qwen3ge.cpp
+            llama-graph-qwen3moege.cpp
             llama-graph-utils.cpp
             llama-graph-ffn.cpp
             llama-graph-attn.cpp

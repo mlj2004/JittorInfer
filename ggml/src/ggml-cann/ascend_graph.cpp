@@ -377,6 +377,19 @@ ge::Graph build_ascend_graph(ggml_cgraph* cgraph,
                 }
                 break;
             }
+            
+            case GGML_OP_DIV: {
+                // 处理除法操作
+                Operator div_op =
+                    handle_div_op(graph, node, ggml_tensor_to_ge_op_map, i);
+                ggml_tensor_to_ge_op_map[node] = div_op;
+
+                // 如果这是最后一个操作，将其添加到输出中
+                if (node == last_op_node) {
+                    graph_outputs.push_back(div_op);
+                }
+                break;
+            }
 
             case GGML_OP_MUL_MAT: {
                 // 处理矩阵乘法操作
@@ -410,6 +423,18 @@ ge::Graph build_ascend_graph(ggml_cgraph* cgraph,
 
                 if (node == last_op_node) {
                     graph_outputs.push_back(softmax_op);
+                }
+                break;
+            }
+
+            case GGML_OP_SUM_ROWS: {
+                // 处理SUM_ROWS操作（沿最后一个维度求和）
+                Operator sum_rows_op =
+                    handle_sum_rows_op(graph, node, ggml_tensor_to_ge_op_map, i);
+                ggml_tensor_to_ge_op_map[node] = sum_rows_op;
+
+                if (node == last_op_node) {
+                    graph_outputs.push_back(sum_rows_op);
                 }
                 break;
             }
